@@ -1253,7 +1253,7 @@ async function confirmSend() {
       monto, dias, tipo, moneda
     };
 
-    const resp = await fetch('/generar-pdf', {
+    const resp = await fetch('http://localhost:8765/generar-pdf', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload)

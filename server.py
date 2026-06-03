@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """
-HMV Ingenieros — Sistema de Viáticos
-Servidor web para despliegue en Render.com
+Servidor local HMV Viáticos — Puerto 8765
+Ejecutar con: python3 server.py
 """
-import http.server, json, os, subprocess, sys
+import http.server, json, base64, os, shutil, subprocess, sys, urllib.parse
 from http.server import HTTPServer, BaseHTTPRequestHandler
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -13,7 +13,7 @@ HTML_FILE  = os.path.join(SCRIPT_DIR, 'viaticos-hmv.html')
 
 class Handler(BaseHTTPRequestHandler):
     def log_message(self, format, *args):
-        print(f"[HMV] {self.address_string()} — {format % args}", flush=True)
+        print(f"[HMV] {self.address_string()} - {format % args}")
 
     def send_cors(self):
         self.send_header('Access-Control-Allow-Origin', '*')
@@ -26,20 +26,14 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
 
     def do_GET(self):
-        path = self.path.split('?')[0]
-        if path in ('/', '/index.html'):
-            try:
-                with open(HTML_FILE, 'rb') as f:
-                    content = f.read()
-                self.send_response(200)
-                self.send_header('Content-Type', 'text/html; charset=utf-8')
-                self.send_header('Content-Length', len(content))
-                self.end_headers()
-                self.wfile.write(content)
-            except Exception as e:
-                self.send_response(500)
-                self.end_headers()
-                self.wfile.write(str(e).encode())
+        if self.path == '/' or self.path == '/index.html':
+            with open(HTML_FILE, 'rb') as f:
+                content = f.read()
+            self.send_response(200)
+            self.send_header('Content-Type', 'text/html; charset=utf-8')
+            self.send_header('Content-Length', len(content))
+            self.end_headers()
+            self.wfile.write(content)
         else:
             self.send_response(404)
             self.end_headers()
@@ -51,7 +45,7 @@ class Handler(BaseHTTPRequestHandler):
             try:
                 data   = json.loads(payload)
                 b64pdf = subprocess.check_output(
-                    [sys.executable, FILL_PY, json.dumps(data)],
+                    ['python3', FILL_PY, json.dumps(data)],
                     cwd=SCRIPT_DIR
                 ).decode('utf-8').strip()
                 resp = json.dumps({'ok': True, 'pdf': b64pdf}).encode('utf-8')
@@ -74,12 +68,12 @@ class Handler(BaseHTTPRequestHandler):
             self.end_headers()
 
 if __name__ == '__main__':
-    port   = int(os.environ.get('PORT', 8765))
-    host   = '0.0.0.0'
-    server = HTTPServer((host, port), Handler)
-    print(f"\n{'='*50}", flush=True)
-    print(f"  HMV Sistema de Viáticos — Puerto {port}", flush=True)
-    print(f"{'='*50}\n", flush=True)
+    port = 8765
+    server = HTTPServer(('localhost', port), Handler)
+    print(f"\n{'='*50}")
+    print(f"  HMV Sistema de Viáticos — Servidor activo")
+    print(f"  Abra su navegador en: http://localhost:{port}")
+    print(f"{'='*50}\n")
     try:
         server.serve_forever()
     except KeyboardInterrupt:
