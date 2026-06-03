@@ -542,8 +542,8 @@
     <div id="formStep3" style="display:none">
       <div id="validationPanelContainer"></div>
       <div class="send-panel" id="sendPanel" style="display:none">
-        <h3>✅ Solicitud lista para enviar</h3>
-        <p>Todos los criterios han sido verificados. Al confirmar: <strong>(1)</strong> se descargará el PDF automáticamente y <strong>(2)</strong> se abrirá su cliente de correo con el mensaje prellenado dirigido a <strong>jmlopez@h-mv.com</strong>. Solo deberá adjuntar el PDF y hacer clic en Enviar.</p>
+        <h3>✅ Solicitud lista para descargar</h3>
+        <p>Todos los criterios han sido verificados. Al confirmar se generará y descargará el PDF del formato HMV-01-AD-FR-001 debidamente diligenciado.</p>
         <div class="send-actions">
           <button class="btn-secondary" onclick="goToStep2()">← Revisar</button>
           <button class="btn-primary" onclick="openEmailModal()">📧 Enviar solicitud</button>
@@ -739,18 +739,12 @@
       <button class="modal-close" onclick="closeEmailModal()">×</button>
     </div>
     <div class="modal-body">
-      <p style="font-size:14px; margin-bottom:1rem">Al confirmar ocurrirán dos acciones automáticas:</p>
-      <div style="font-size:13px; background:#e6f1fb; border:1px solid #85b7eb; padding:1rem; border-radius:6px; line-height:2; margin-bottom:1rem">
-        <div>📄 <strong>Paso 1:</strong> El PDF se descargará automáticamente en su equipo</div>
-        <div>📧 <strong>Paso 2:</strong> Se abrirá su cliente de correo con el mensaje y destinatario prellenados</div>
-        <div>📎 <strong>Paso 3:</strong> Adjunte el PDF descargado y haga clic en <em>Enviar</em></div>
-      </div>
+      <p style="font-size:14px; margin-bottom:1rem">Se generará y descargará el PDF con los siguientes datos:</p>
       <div id="sendSummary" style="font-size:13px; background:var(--hmv-light); padding:1rem; border-radius:6px; line-height:2"></div>
-      <p style="font-size:12px; color:var(--hmv-muted); margin-top:1rem">📧 Destinatario: <strong>jmlopez@h-mv.com</strong></p>
     </div>
     <div class="modal-footer">
       <button class="btn-secondary" onclick="closeEmailModal()">Cancelar</button>
-      <button class="btn-primary" id="btnConfirmSend" onclick="confirmSend()" style="margin-top:0">Confirmar y enviar</button>
+      <button class="btn-primary" id="btnConfirmSend" onclick="confirmSend()" style="margin-top:0">📄 Generar y descargar PDF</button>
     </div>
   </div>
 </div>
@@ -1275,75 +1269,32 @@ async function confirmSend() {
     for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
     const pdfBlob = new Blob([bytes], { type: 'application/pdf' });
 
-    btn.textContent = 'Abriendo correo...';
+    btn.textContent = 'Descargando PDF...';
     await sendEmail(pdfBlob);
     saveToHistory();
     closeEmailModal();
-    showToast('✅ PDF descargado. Adjúntelo en el correo que se acaba de abrir y haga clic en Enviar.', 'success');
+    showToast('✅ PDF generado y descargado correctamente.', 'success');
     setTimeout(() => showScreen('home'), 3000);
   } catch (err) {
     showToast('Error al enviar: ' + err.message, 'error');
   } finally {
     btn.disabled = false;
-    btn.textContent = 'Confirmar y enviar';
+    btn.textContent = 'Generar y descargar PDF';
   }
 }
 
 
 async function sendEmail(pdfBlob) {
-  const { monto, dias } = calcMontoValue();
-  const tipo = document.querySelector('input[name="tipoViatico"]:checked')?.value || 'Ocasionales';
-  const consec = document.getElementById('fConsecutivo').textContent || '001';
-  const salida = document.getElementById('fFechaSalida').value;
-  const regreso = document.getElementById('fFechaRegreso').value;
-  const ciudad = document.getElementById('fCiudad').value;
-  const motivo = document.getElementById('fMotivo').value;
-  const elab = document.getElementById('fFechaElab').value;
-
-  // 1 — Descargar PDF automáticamente
+  const consec   = document.getElementById('fConsecutivo').textContent || '001';
   const filename = `HMV-01-AD-FR-001_${currentUser.nombre.replace(/\s+/g,'_')}_${consec}.pdf`;
-  const url = URL.createObjectURL(pdfBlob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = filename;
+  const url      = URL.createObjectURL(pdfBlob);
+  const a        = document.createElement('a');
+  a.href         = url;
+  a.download     = filename;
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);
   setTimeout(() => URL.revokeObjectURL(url), 8000);
-
-  // 2 — Abrir cliente de correo con todo prellenado
-  const asunto = encodeURIComponent(
-    `Solicitud de Anticipo de Gastos de Viaje \u2013 Consecutivo ${consec} \u2013 ${currentUser.nombre}`
-  );
-  const cuerpo = encodeURIComponent(
-`Estimado Jorge Mario L\u00f3pez,
-
-Por medio del presente, me permito remitir la solicitud de anticipo de gastos de viaje con los siguientes datos:
-
-  Consecutivo         : ${consec}
-  Solicitante         : ${currentUser.nombre}
-  DNI / C.E.          : ${currentUser.dni}
-  N\u00ba Proyecto / C.C.  : ${currentUser.proyecto}
-  Ciudad de destino   : ${ciudad}
-  Motivo del viaje    : ${motivo}
-  Fecha de elaboraci\u00f3n: ${elab}
-  Fecha de salida     : ${salida}
-  Fecha de regreso    : ${regreso}
-  D\u00edas                : ${dias}
-  Tipo de vi\u00e1tico      : Vi\u00e1ticos ${tipo}
-  Monto solicitado    : S/. ${monto.toFixed(2)}
-
-Adjunto encontrar\u00e1 el formato HMV-01-AD-FR-001 debidamente diligenciado.
-Nombre del archivo   : ${filename}
-
-Quedo atento a su aprobaci\u00f3n.
-
-Atentamente,
-${currentUser.nombre}`
-  );
-
-  await new Promise(r => setTimeout(r, 800));
-  window.location.href = `mailto:jmlopez@h-mv.com?subject=${asunto}&body=${cuerpo}`;
 }
 
 function saveToHistory() {

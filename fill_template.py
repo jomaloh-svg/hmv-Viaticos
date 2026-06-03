@@ -25,21 +25,34 @@ def get_shapes(cell):
     return shapes
 
 def add_x_to_shape(wsp_el):
-    """Inserta una X centrada y en negrita dentro del recuadro flotante."""
+    """Inserta una X centrada vertical y horizontalmente dentro del recuadro flotante."""
+    # 1. Ajustar bodyPr para centrado vertical y sin márgenes internos
+    bodyPr = wsp_el.find(f'{{{WPS_NS}}}bodyPr')
+    if bodyPr is not None:
+        bodyPr.set('anchor',    'ctr')   # centrado vertical
+        bodyPr.set('anchorCtr', '1')
+        bodyPr.set('lIns',      '0')     # sin margen interno
+        bodyPr.set('rIns',      '0')
+        bodyPr.set('tIns',      '0')
+        bodyPr.set('bIns',      '0')
+
+    # 2. Construir txbx con X centrada
     txbx    = etree.Element(f'{{{WPS_NS}}}txbx')
     content = etree.SubElement(txbx, f'{{{W_NS}}}txbxContent')
     p       = etree.SubElement(content, f'{{{W_NS}}}p')
     pPr     = etree.SubElement(p, f'{{{W_NS}}}pPr')
     jc      = etree.SubElement(pPr, f'{{{W_NS}}}jc')
     jc.set(f'{{{W_NS}}}val', 'center')
+    spc     = etree.SubElement(pPr, f'{{{W_NS}}}spacing')
+    spc.set(f'{{{W_NS}}}before', '0')
+    spc.set(f'{{{W_NS}}}after',  '0')
     r       = etree.SubElement(p, f'{{{W_NS}}}r')
     rPr     = etree.SubElement(r, f'{{{W_NS}}}rPr')
     b       = etree.SubElement(rPr, f'{{{W_NS}}}b')
     sz      = etree.SubElement(rPr, f'{{{W_NS}}}sz')
-    sz.set(f'{{{W_NS}}}val', '16')
+    sz.set(f'{{{W_NS}}}val', '14')
     t       = etree.SubElement(r, f'{{{W_NS}}}t')
     t.text  = 'X'
-    bodyPr  = wsp_el.find(f'{{{WPS_NS}}}bodyPr')
     wsp_el.insert(list(wsp_el).index(bodyPr), txbx)
 
 def remove_highlight(run):
@@ -95,8 +108,8 @@ def fmt_date(iso):
     return f"{parts[2]}/{parts[1]}/{parts[0]}" if len(parts) == 3 else iso
 
 def fill_and_convert(data):
-    src = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'plantilla.docx')
-    dst = '/tmp/filled.docx'
+    src = '/home/claude/plantilla.docx'
+    dst = '/home/claude/filled.docx'
     shutil.copy(src, dst)
     doc = Document(dst)
 
@@ -223,29 +236,146 @@ def fill_and_convert(data):
         if len(runs0) > 8: set_run(runs0[8], monto_letras)
         if len(runs0) > 9: set_run(runs0[9], ')')
 
-    # Limpiar X residual de runs de texto en P1 y P4
+    # ── Eliminar recuadros flotantes ─────────────────────────────
+    WP_NS_  = 'http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing'
+    MC_NS   = 'http://schemas.openxmlformats.org/markup-compatibility/2006'
+    for pi in [1, 4]:
+        para = cell.paragraphs[pi]
+        for run in para.runs:
+            # Remove AlternateContent (wraps the anchor drawing)
+            for ac in run._r.findall(f'{{{MC_NS}}}AlternateContent'):
+                run._r.remove(ac)
+            # Remove any remaining anchor
+            for anc in run._r.findall(f'.//{{{WP_NS_}}}anchor'):
+                anc.getparent().remove(anc)
+
+    # ── Marcar X en texto según selección ────────────────────────
+    # Font size original = 127000 EMU = 10pt → use 152400 = 12pt (1pt larger)
+    X_SIZE = '24'   # half-points: 24 = 12pt
+
+    def make_x_run(para_obj):
+        """Return a new bold run with X at larger size, cloned from run3 formatting."""
+        import copy
+        from docx.oxml.ns import qn as qn2
+        base = para_obj.runs[3]._r  # use run3 as format reference
+        new_r = copy.deepcopy(base)
+        # Clear text
+        for t in new_r.findall(qn2('w:t')):
+            new_r.remove(t)
+        # Set rPr: bold + size
+        rPr = new_r.find(qn2('w:rPr'))
+        if rPr is None:
+            rPr = etree.SubElement(new_r, qn2('w:rPr'))
+        b = rPr.find(qn2('w:b'))
+        if b is None:
+            b = etree.SubElement(rPr, qn2('w:b'))
+        sz = rPr.find(qn2('w:sz'))
+        if sz is None:
+            sz = etree.SubElement(rPr, qn2('w:sz'))
+        sz.set(qn2('w:val'), X_SIZE)
+        szCs = rPr.find(qn2('w:szCs'))
+        if szCs is None:
+            szCs = etree.SubElement(rPr, qn2('w:szCs'))
+        szCs.set(qn2('w:val'), X_SIZE)
+        # Add text X
+        t_el = etree.SubElement(new_r, qn2('w:t'))
+        t_el.text = 'X'
+        return new_r
+
+    # ── Marcar X después de cada opción: "Opción: X" ────────────
+    # Format: texto de opción + ': ' + X en negrita tamaño 12pt
+
+    def insert_colon_x_after(run_obj, para_obj):
+        """Inserta ': X' después del run indicado. X en negrita y 12pt."""
+        import copy
+        from docx.oxml.ns import qn as qn2
+        XML_SP = '{http://www.w3.org/XML/1998/namespace}space'
+        # Run con ': '
+        sep_r = copy.deepcopy(run_obj._r)
+        for t in sep_r.findall(qn2('w:t')): sep_r.remove(t)
+        rPr = sep_r.find(qn2('w:rPr'))
+        if rPr is not None:
+            for tag in [qn2('w:b'), qn2('w:bCs')]:
+                el = rPr.find(tag)
+                if el is not None: rPr.remove(el)
+        t_sep = etree.SubElement(sep_r, qn2('w:t'))
+        t_sep.text = ': '
+        t_sep.set(XML_SP, 'preserve')
+        run_obj._r.addnext(sep_r)
+        # Run con X en negrita 12pt
+        x_r = copy.deepcopy(run_obj._r)
+        for t in x_r.findall(qn2('w:t')): x_r.remove(t)
+        rPr2 = x_r.find(qn2('w:rPr'))
+        if rPr2 is None:
+            rPr2 = etree.SubElement(x_r, qn2('w:rPr'))
+        # Bold
+        if rPr2.find(qn2('w:b')) is None:
+            etree.SubElement(rPr2, qn2('w:b'))
+        if rPr2.find(qn2('w:bCs')) is None:
+            etree.SubElement(rPr2, qn2('w:bCs'))
+        # Size 12pt = 24 half-points
+        sz = rPr2.find(qn2('w:sz'))
+        if sz is None: sz = etree.SubElement(rPr2, qn2('w:sz'))
+        sz.set(qn2('w:val'), '24')
+        szCs = rPr2.find(qn2('w:szCs'))
+        if szCs is None: szCs = etree.SubElement(rPr2, qn2('w:szCs'))
+        szCs.set(qn2('w:val'), '24')
+        t_x = etree.SubElement(x_r, qn2('w:t'))
+        t_x.text = 'X'
+        sep_r.addnext(x_r)
+
+    # P1 — Moneda: after 'PEN)' (run8) or '(USD)' (run15)
     runs1 = cell.paragraphs[1].runs
-    if len(runs1) > 10: runs1[10].text = '     '   # quitar X de texto de USD
-
-    runs4 = cell.paragraphs[4].runs
-    if len(runs4) > 10: runs4[10].text = '         '  # quitar X de texto de Permanentes
-
-    # ── Marcar recuadros con X según selección ────────────────────
-    shapes = get_shapes(cell)
-
-    # Moneda
+    runs1[10].text = '    '   # clear original X residual
     if moneda == 'PEN':
-        if 'Rectangle 3' in shapes: add_x_to_shape(shapes['Rectangle 3'])
-    else:  # USD
-        if 'Rectangle 4' in shapes: add_x_to_shape(shapes['Rectangle 4'])
+        insert_colon_x_after(runs1[8], cell.paragraphs[1])   # after 'PEN)'
+    else:
+        insert_colon_x_after(runs1[15], cell.paragraphs[1])  # after '(USD)'
 
-    # Tipo de viático
-    if tipo == 'Ocasionales':
-        if 'Rectangle 5' in shapes: add_x_to_shape(shapes['Rectangle 5'])
-    elif tipo == 'Permanentes':
-        if 'Rectangle 6' in shapes: add_x_to_shape(shapes['Rectangle 6'])
-    else:  # Combustible
-        if 'Rectangle 2' in shapes: add_x_to_shape(shapes['Rectangle 2'])
+    # P4 — Tipo viático: reescritura completa sin tabs, una sola línea
+    from docx.oxml import OxmlElement as OXE
+    import copy as _copy
+    p4   = cell.paragraphs[4]._p
+    pPr4 = p4.find(qn('w:pPr'))
+
+    def mk_run(text, bold=False, sz='20'):
+        r  = OXE('w:r'); rP = OXE('w:rPr')
+        s  = OXE('w:sz');   s.set(qn('w:val'), sz);  rP.append(s)
+        sC = OXE('w:szCs'); sC.set(qn('w:val'), sz); rP.append(sC)
+        if bold: rP.append(OXE('w:b')); rP.append(OXE('w:bCs'))
+        r.append(rP)
+        t = OXE('w:t'); t.text = text
+        t.set('{http://www.w3.org/XML/1998/namespace}space', 'preserve')
+        r.append(t); return r
+
+    # Remove all w:r from P4
+    for ch in list(p4):
+        if ch.tag == qn('w:r'): p4.remove(ch)
+
+    # Remove tabs and firstLine indent
+    for tag in [qn('w:tabs'), qn('w:ind')]:
+        el = pPr4.find(tag)
+        if el is not None: pPr4.remove(el)
+    ni = OXE('w:ind'); ni.set(qn('w:left'), '554'); pPr4.append(ni)
+
+    # One line: label + ': X' for selected tipo, plain text for others
+    p4.append(mk_run('Viáticos Ocasionales'))
+    if tipo == 'Ocasionales': p4.append(mk_run(': ', sz='20')); p4.append(mk_run('X', bold=True, sz='24'))
+    p4.append(mk_run('      '))
+    p4.append(mk_run('Viáticos Permanentes'))
+    if tipo == 'Permanentes': p4.append(mk_run(': ', sz='20')); p4.append(mk_run('X', bold=True, sz='24'))
+    p4.append(mk_run('      '))
+    p4.append(mk_run('Combustible'))
+    if tipo == 'Combustible': p4.append(mk_run(': ', sz='20')); p4.append(mk_run('X', bold=True, sz='24'))
+
+    # Separate paragraph for "Y que serán..."
+    new_p4b = OXE('w:p')
+    new_pPr4 = _copy.deepcopy(pPr4)
+    ni2 = new_pPr4.find(qn('w:ind'))
+    if ni2 is not None: new_pPr4.remove(ni2)
+    new_p4b.append(new_pPr4)
+    new_p4b.append(mk_run('Y que serán sustentados con las facturas o boletas de pago a mi regreso.'))
+    p4.addnext(new_p4b)
 
     # ── Datos bancarios ───────────────────────────────────────────
     for run in t2.rows[9].cells[0].paragraphs[1].runs:
@@ -271,12 +401,13 @@ def fill_and_convert(data):
     doc.save(dst)
 
     result = subprocess.run(
-        ['soffice', '--headless', '--convert-to', 'pdf', '--outdir', '/tmp/', dst],
-        capture_output=True, text=True, timeout=60
+        ['python3', '/mnt/skills/public/docx/scripts/office/soffice.py',
+         '--headless', '--convert-to', 'pdf', '--outdir', '/home/claude/', dst],
+        capture_output=True, text=True
     )
-    pdf_path = '/tmp/filled.pdf'
+    pdf_path = '/home/claude/filled.pdf'
     if not os.path.exists(pdf_path):
-        raise Exception(f"PDF conversion failed: {result.returncode} — {result.stderr or result.stdout}")
+        raise Exception(f"PDF conversion failed: {result.stderr}")
 
     with open(pdf_path, 'rb') as f:
         b64 = base64.b64encode(f.read()).decode('utf-8')
