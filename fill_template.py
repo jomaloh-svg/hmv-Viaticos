@@ -414,13 +414,12 @@ def fill_and_convert(data):
     doc.save(dst)
 
     result = subprocess.run(
-        ['python3', '/mnt/skills/public/docx/scripts/office/soffice.py',
-         '--headless', '--convert-to', 'pdf', '--outdir', '/tmp/', dst],
-        capture_output=True, text=True
+        ['soffice', '--headless', '--convert-to', 'pdf', '--outdir', '/tmp/', dst],
+        capture_output=True, text=True, timeout=60
     )
     pdf_path = '/tmp/filled.pdf'
     if not os.path.exists(pdf_path):
-        raise Exception(f"PDF conversion failed: {result.stderr}")
+        raise Exception(f"PDF conversion failed: {result.stderr or result.stdout}")
 
     with open(pdf_path, 'rb') as f:
         b64 = base64.b64encode(f.read()).decode('utf-8')
