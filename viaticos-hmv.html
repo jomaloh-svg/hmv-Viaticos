@@ -1289,7 +1289,11 @@ async function confirmSend() {
       body: JSON.stringify(payload)
     });
 
-    if (!resp.ok) throw new Error('El servidor no respondió correctamente. Verifique que server.py esté en ejecución.');
+    if (!resp.ok) {
+      let errDetail = '';
+      try { const e = await resp.json(); errDetail = e.error || ''; } catch {}
+      throw new Error(`Error del servidor (${resp.status}): ${errDetail || 'Revise los logs en Render'}`);
+    }
     const result = await resp.json();
     if (!result.ok) throw new Error(result.error || 'Error al generar el PDF');
 
