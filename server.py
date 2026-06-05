@@ -19,6 +19,12 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header('Access-Control-Allow-Methods', 'POST, GET, OPTIONS')
         self.send_header('Access-Control-Allow-Headers', 'Content-Type')
 
+    def do_HEAD(self):
+        """Render health check uses HEAD — respond 200 OK."""
+        self.send_response(200)
+        self.send_cors()
+        self.end_headers()
+
     def do_OPTIONS(self):
         self.send_response(200)
         self.send_cors()
