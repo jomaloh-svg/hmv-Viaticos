@@ -108,8 +108,8 @@ def fmt_date(iso):
     return f"{parts[2]}/{parts[1]}/{parts[0]}" if len(parts) == 3 else iso
 
 def fill_and_convert(data):
-    src = '/home/claude/plantilla.docx'
-    dst = '/home/claude/filled.docx'
+    src = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'plantilla.docx')
+    dst = '/tmp/filled.docx'
     shutil.copy(src, dst)
     doc = Document(dst)
 
@@ -415,10 +415,10 @@ def fill_and_convert(data):
 
     result = subprocess.run(
         ['python3', '/mnt/skills/public/docx/scripts/office/soffice.py',
-         '--headless', '--convert-to', 'pdf', '--outdir', '/home/claude/', dst],
+         '--headless', '--convert-to', 'pdf', '--outdir', '/tmp/', dst],
         capture_output=True, text=True
     )
-    pdf_path = '/home/claude/filled.pdf'
+    pdf_path = '/tmp/filled.pdf'
     if not os.path.exists(pdf_path):
         raise Exception(f"PDF conversion failed: {result.stderr}")
 
