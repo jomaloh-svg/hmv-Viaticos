@@ -108,8 +108,8 @@ def fmt_date(iso):
     return f"{parts[2]}/{parts[1]}/{parts[0]}" if len(parts) == 3 else iso
 
 def fill_and_convert(data):
-    src = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'plantilla.docx')
-    dst = '/tmp/filled.docx'
+    src = '/home/claude/plantilla.docx'
+    dst = '/home/claude/filled.docx'
     shutil.copy(src, dst)
     doc = Document(dst)
 
@@ -135,6 +135,10 @@ def fill_and_convert(data):
     ticket_a     = data.get('ticketA', '')
     ticket_fecha = fmt_date(data.get('ticketFecha', ''))
     ticket_hora  = data.get('ticketHora', '')
+    ticket_de2   = data.get('ticketDe2', '')
+    ticket_a2    = data.get('ticketA2', '')
+    ticket_fecha2= fmt_date(data.get('ticketFecha2', ''))
+    ticket_hora2 = data.get('ticketHora2', '')
     dias         = int(data.get('dias', 0))
 
     # Texto de comentarios con deductivo integrado
@@ -386,25 +390,35 @@ def fill_and_convert(data):
         if 'X' in run.text: set_run(run, banco)
 
     # ── TABLE 3: Tiquete aéreo ────────────────────────────────────
-    if ticket_de or ticket_a:
+    if ticket_de or ticket_a or ticket_de2 or ticket_a2:
         t3 = tables[3]
-        row = t3.rows[2]
         def set_cell_text(c, text):
             p = c.paragraphs[0]
             if not p.runs: p.add_run(text)
             else: p.runs[0].text = text
-        if len(row.cells) > 1: set_cell_text(row.cells[1], ticket_de)
-        if len(row.cells) > 2: set_cell_text(row.cells[2], ticket_a)
-        if len(row.cells) > 3: set_cell_text(row.cells[3], ticket_fecha)
-        if len(row.cells) > 4: set_cell_text(row.cells[4], ticket_hora)
+        # Vuelo 1 — fila 2
+        if len(t3.rows) > 2:
+            row = t3.rows[2]
+            if len(row.cells) > 1: set_cell_text(row.cells[1], ticket_de)
+            if len(row.cells) > 2: set_cell_text(row.cells[2], ticket_a)
+            if len(row.cells) > 3: set_cell_text(row.cells[3], ticket_fecha)
+            if len(row.cells) > 4: set_cell_text(row.cells[4], ticket_hora)
+        # Vuelo 2 — fila 3
+        if (ticket_de2 or ticket_a2) and len(t3.rows) > 3:
+            row2 = t3.rows[3]
+            if len(row2.cells) > 1: set_cell_text(row2.cells[1], ticket_de2)
+            if len(row2.cells) > 2: set_cell_text(row2.cells[2], ticket_a2)
+            if len(row2.cells) > 3: set_cell_text(row2.cells[3], ticket_fecha2)
+            if len(row2.cells) > 4: set_cell_text(row2.cells[4], ticket_hora2)
 
     doc.save(dst)
 
     result = subprocess.run(
-        ['soffice', '--headless', '--convert-to', 'pdf', '--outdir', '/tmp/', dst],
-        capture_output=True, text=True, timeout=60
+        ['python3', '/mnt/skills/public/docx/scripts/office/soffice.py',
+         '--headless', '--convert-to', 'pdf', '--outdir', '/home/claude/', dst],
+        capture_output=True, text=True
     )
-    pdf_path = '/tmp/filled.pdf'
+    pdf_path = '/home/claude/filled.pdf'
     if not os.path.exists(pdf_path):
         raise Exception(f"PDF conversion failed: {result.stderr}")
 
