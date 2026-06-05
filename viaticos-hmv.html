@@ -1286,7 +1286,12 @@ async function confirmSend() {
 
 async function sendEmail(pdfBlob) {
   const consec   = document.getElementById('fConsecutivo').textContent || '001';
-  const filename = `HMV-01-AD-FR-001_${currentUser.nombre.replace(/\s+/g,'_')}_${consec}.pdf`;
+  // Generar nombre según convención: AAMM HMV-01-AD-FR-001 (O/P) Nombre C Rev 00.pdf
+  const fechaElab = document.getElementById('fFechaElab').value; // YYYY-MM-DD
+  const tipo      = document.querySelector('input[name="tipoViatico"]:checked')?.value || 'Ocasionales';
+  const tipoCode  = tipo === 'Permanentes' ? 'P' : 'O';
+  const aamm      = fechaElab ? fechaElab.slice(2,4) + fechaElab.slice(5,7) : '';
+  const filename  = `${aamm} HMV-01-AD-FR-001 (${tipoCode}) ${currentUser.nombre} ${consec} Rev 00.pdf`;
   const url      = URL.createObjectURL(pdfBlob);
   const a        = document.createElement('a');
   a.href         = url;
