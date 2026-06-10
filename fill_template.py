@@ -108,8 +108,8 @@ def fmt_date(iso):
     return f"{parts[2]}/{parts[1]}/{parts[0]}" if len(parts) == 3 else iso
 
 def fill_and_convert(data):
-    src = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'plantilla.docx')
-    dst = '/tmp/filled.docx'
+    src = '/home/claude/plantilla.docx'
+    dst = '/home/claude/filled.docx'
     shutil.copy(src, dst)
     doc = Document(dst)
 
@@ -369,8 +369,11 @@ def fill_and_convert(data):
     p4.append(mk_run('Viáticos Permanentes'))
     if tipo == 'Permanentes': p4.append(mk_run(': ', sz='20')); p4.append(mk_run('X', bold=True, sz='24'))
     p4.append(mk_run('      '))
-    p4.append(mk_run('Combustible'))
-    if tipo == 'Combustible': p4.append(mk_run(': ', sz='20')); p4.append(mk_run('X', bold=True, sz='24'))
+    p4.append(mk_run('Movilidad'))
+    if tipo == 'Movilidad': p4.append(mk_run(': ', sz='20')); p4.append(mk_run('X', bold=True, sz='24'))
+    p4.append(mk_run('      '))
+    p4.append(mk_run('Otros'))
+    if tipo == 'Otros': p4.append(mk_run(': ', sz='20')); p4.append(mk_run('X', bold=True, sz='24'))
 
     # Separate paragraph for "Y que serán..."
     new_p4b = OXE('w:p')
@@ -414,12 +417,13 @@ def fill_and_convert(data):
     doc.save(dst)
 
     result = subprocess.run(
-        ['soffice', '--headless', '--convert-to', 'pdf', '--outdir', '/tmp/', dst],
-        capture_output=True, text=True, timeout=60
+        ['python3', '/mnt/skills/public/docx/scripts/office/soffice.py',
+         '--headless', '--convert-to', 'pdf', '--outdir', '/home/claude/', dst],
+        capture_output=True, text=True
     )
-    pdf_path = '/tmp/filled.pdf'
+    pdf_path = '/home/claude/filled.pdf'
     if not os.path.exists(pdf_path):
-        raise Exception(f"PDF conversion failed: {result.stderr or result.stdout}")
+        raise Exception(f"PDF conversion failed: {result.stderr}")
 
     with open(pdf_path, 'rb') as f:
         b64 = base64.b64encode(f.read()).decode('utf-8')

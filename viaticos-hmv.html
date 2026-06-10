@@ -486,8 +486,23 @@
                   <input type="radio" name="tipoViatico" value="Permanentes" onchange="calcMonto()"> Permanentes (S/.110/día)
                 </label>
                 <label class="radio-option">
-                  <input type="radio" name="tipoViatico" value="Combustible" onchange="calcMonto()"> Combustible
+                  <input type="radio" name="tipoViatico" value="Movilidad" onchange="calcMonto()"> Movilidad (máx. S/.250)
                 </label>
+                <label class="radio-option">
+                  <input type="radio" name="tipoViatico" value="Otros" onchange="calcMonto()"> Otros (máx. S/.2,500)
+                </label>
+              </div>
+            </div>
+          </div>
+
+          <!-- Monto manual para Movilidad y Otros -->
+          <div id="montoManualPanel" style="display:none; margin-top:1rem; padding:1rem; background:var(--hmv-light); border:1px solid var(--hmv-border); border-radius:6px;">
+            <div class="form-grid">
+              <div class="form-group">
+                <label class="form-label" id="montoManualLabel">Monto a solicitar (S/.) <span class="req">*</span></label>
+                <input type="number" class="form-control" id="fMontoManual" min="0" step="0.01" placeholder="0.00" oninput="calcMonto()">
+                <span class="form-hint" id="montoManualHint"></span>
+                <span class="form-error" id="err-fMontoManual"></span>
               </div>
             </div>
           </div>
@@ -896,7 +911,7 @@ function startNewRequest() {
   ['fConsecutivo','fCiudad','fMotivo','fComentarios','fFechaSalida','fFechaRegreso',
    'fTicketDe','fTicketA','fTicketFecha','fTicketHora',
    'fTicketDe2','fTicketA2','fTicketFecha2','fTicketHora2',
-   'fDeductivo','fDeductivoDesc'].forEach(id => {
+   'fDeductivo','fDeductivoDesc','fMontoManual'].forEach(id => {
     const el = document.getElementById(id);
     if (el) el.value = '';
   });
@@ -1084,7 +1099,24 @@ function runFullValidation() {
   if (!tipo) {
     errors.push('Debe seleccionar un tipo de viático');
     checks.push({ ok: false, msg: 'Tipo de viático: no seleccionado' });
-  } else checks.push({ ok: true, msg: 'Tipo de viático: ' + tipo });
+  } else {
+    checks.push({ ok: true, msg: 'Tipo de viático: ' + tipo });
+  }
+
+  // 3.7b Validar monto manual para Movilidad y Otros
+  if (tipo === 'Movilidad' || tipo === 'Otros') {
+    const limiteManual = tipo === 'Movilidad' ? 250 : 2500;
+    const montoManual  = parseFloat(document.getElementById('fMontoManual')?.value || '0') || 0;
+    if (montoManual <= 0) {
+      errors.push(`Debe ingresar un monto para ${tipo}`);
+      checks.push({ ok: false, msg: `Monto ${tipo}: requerido` });
+    } else if (montoManual > limiteManual) {
+      errors.push(`El monto de ${tipo} no puede superar S/. ${limiteManual.toLocaleString('es-PE')}`);
+      checks.push({ ok: false, msg: `Monto ${tipo}: excede el límite de S/. ${limiteManual}` });
+    } else {
+      checks.push({ ok: true, msg: `Monto ${tipo}: S/. ${montoManual.toFixed(2)} ✓` });
+    }
+  }
 
   // 3.8 Monto calculado
   const { monto, dias, tarifa, deductivo } = calcMontoValue();
@@ -1153,31 +1185,86 @@ function calcMontoValue() {
   if (chk && chk.checked) {
     deductivo = parseFloat(document.getElementById('fDeductivo')?.value || '0') || 0;
   }
-  const monto = Math.max(0, dias * tarifa - deductivo);
+
+  // Movilidad y Otros: monto manual
+  let monto = 0;
+  if (tipo === 'Movilidad' || tipo === 'Otros') {
+    monto = parseFloat(document.getElementById('fMontoManual')?.value || '0') || 0;
+    deductivo = 0;
+  } else {
+    monto = Math.max(0, dias * tarifa - deductivo);
+  }
+  return { monto, dias, tarifa, deductivo };
   return { monto, dias, tarifa, deductivo };
 }
 
 function calcMonto() {
   const tipo = document.querySelector('input[name="tipoViatico"]:checked')?.value || 'Ocasionales';
+  const manualPanel = document.getElementById('montoManualPanel');
+  const manualLabel = document.getElementById('montoManualLabel');
+  const manualHint  = document.getElementById('montoManualHint');
+  const errManual   = document.getElementById('err-fMontoManual');
+
+  // Mostrar/ocultar panel manual
+  if (tipo === 'Movilidad' || tipo === 'Otros') {
+    manualPanel.style.display = 'block';
+    const limite = tipo === 'Movilidad' ? 250 : 2500;
+    manualLabel.innerHTML = `Monto a solicitar (S/.) <span class="req">*</span>`;
+    manualHint.textContent = `Límite máximo: S/. ${limite.toLocaleString('es-PE')}`;
+    // Validate limit
+    const val = parseFloat(document.getElementById('fMontoManual')?.value || '0') || 0;
+    if (val > limite) {
+      errManual.textContent = `El monto no puede superar S/. ${limite.toLocaleString('es-PE')}`;
+    } else {
+      errManual.textContent = '';
+    }
+  } else {
+    manualPanel.style.display = 'none';
+    if (errManual) errManual.textContent = '';
+  }
+
   const { monto, dias, tarifa, deductivo } = calcMontoValue();
   const area = document.getElementById('montoPreviewArea');
-  if (tipo === 'Combustible') {
-    area.innerHTML = '<p style="font-size:13px; color:var(--hmv-muted); margin-top:1rem">Para viáticos de combustible, ingrese el monto directamente en el campo de comentarios.</p>';
+
+  if (tipo === 'Movilidad' || tipo === 'Otros') {
+    if (monto > 0) {
+      const limite = tipo === 'Movilidad' ? 250 : 2500;
+      const pct = Math.min(100, Math.round(monto / limite * 100));
+      area.innerHTML = `<div class="monto-preview">
+        <div>
+          <div class="label">Monto solicitado</div>
+          <div class="amount">S/. ${monto.toFixed(2)}</div>
+          <div class="detail">${pct}% del límite permitido (S/. ${limite.toLocaleString('es-PE')})</div>
+        </div>
+        <div style="text-align:right">
+          <div class="label">Tipo</div>
+          <div style="font-size:15px; font-weight:600; margin-top:4px">${tipo}</div>
+          <div class="detail">Ingreso manual</div>
+        </div>
+      </div>`;
+    } else {
+      area.innerHTML = '';
+    }
     return;
   }
-  if (dias > 0) {
-    area.innerHTML = `<div class="monto-preview">
-      <div>
-        <div class="label">Monto calculado</div>
-        <div class="amount">S/. ${monto.toFixed(2)}</div>
-        <div class="detail">${dias} días × S/.${tarifa}${deductivo > 0 ? ` − S/.${deductivo} deductivo` : ''}</div>
-      </div>
-      <div style="text-align:right">
-        <div class="label">Tipo</div>
-        <div style="font-size:15px; font-weight:600; margin-top:4px">Viáticos ${tipo}</div>
-        <div class="detail">Tarifa diaria: S/.${tarifa}</div>
-      </div>
-    </div>`;
+
+  if (tipo === 'Ocasionales' || tipo === 'Permanentes') {
+    if (dias > 0) {
+      area.innerHTML = `<div class="monto-preview">
+        <div>
+          <div class="label">Monto calculado</div>
+          <div class="amount">S/. ${monto.toFixed(2)}</div>
+          <div class="detail">${dias} días × S/.${tarifa}${deductivo > 0 ? ` − S/.${deductivo} deductivo` : ''}</div>
+        </div>
+        <div style="text-align:right">
+          <div class="label">Tipo</div>
+          <div style="font-size:15px; font-weight:600; margin-top:4px">Viáticos ${tipo}</div>
+          <div class="detail">Tarifa diaria: S/.${tarifa}</div>
+        </div>
+      </div>`;
+    } else {
+      area.innerHTML = '';
+    }
   } else {
     area.innerHTML = '';
   }
